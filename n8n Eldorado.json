@@ -1,0 +1,287 @@
+{
+  "name": "n8n Eldorado",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "e7e9272b-cbe3-4371-9a7b-895d671548cd",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.eldorado.gg/api/authentication/seller/token",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "options": {}
+      },
+      "id": "b5583904-57b6-4576-8114-3d74e0e2c792",
+      "name": "Get Access Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "lbmqcmWHUQiFyZmQ",
+          "name": "Simplified Custom Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://www.eldorado.gg/api/boostingOffers/me/boostingRequests/received",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $(\"Get Access Token\").item.json.accessToken }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0c2a5ddd-5776-45e9-85e2-efe559c9020c",
+      "name": "Get Orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const store = $getWorkflowStaticData('global');\nconst rows = $input.all().map(function (i) { return i.json; });\nlet orders = [];\nrows.forEach(function (j) {\n  if (Array.isArray(j.orders)) orders = orders.concat(j.orders);\n  else if (Array.isArray(j.results)) orders = orders.concat(j.results);\n  else if (Array.isArray(j.items)) orders = orders.concat(j.items);\n  else if (Array.isArray(j.data)) orders = orders.concat(j.data);\n  else if (j.id !== undefined) orders.push(j);\n});\n\nconst seen = store.seenOrderIds || [];\nconst firstRun = !store.initialized;\nconst fresh = orders.filter(function (o) { return seen.indexOf(String(o.id)) === -1; });\n\nstore.seenOrderIds = seen.concat(fresh.map(function (o) { return String(o.id); })).slice(-500);\nstore.initialized = true;\n\nif (firstRun) return [];\n\nreturn fresh.map(function (o) {\n  return { json: { orderId: String(o.id), createdDate: o.createdDate } };\n});"
+      },
+      "id": "88823255-69d0-4f54-9d04-d06be7b94acc",
+      "name": "Detect New Orders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.eldorado.gg/api/boostingOffers/boostingRequests/{{ $json.orderId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $(\"Get Access Token\").first().json.accessToken }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2d285f2a-690d-4cb0-ae8a-6cd9d846cc66",
+      "name": "Get Request Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        896,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "c1a00000-0000-4000-8000-000000000001",
+              "leftValue": "={{ $json.gameCategoryTitle }}",
+              "rightValue": "Custom Request",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "c1a00000-0000-4000-8000-000000000002",
+              "leftValue": "={{ ['north america','latin america north','latin america south'].includes(String((($json.boostingRequestDetails.descriptionValues || []).find(d => String(d.label).trim().toLowerCase() === 'region') || {}).value || '').trim().toLowerCase()) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "c1a00000-0000-4000-8000-000000000003",
+              "leftValue": "={{ (Date.now() - new Date($('Detect New Orders').item.json.createdDate).getTime()) <= 180000 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "141b3eaf-b2bb-4ea4-ad29-0f23cd35b83a",
+      "name": "Filter",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.4,
+      "position": [
+        1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "value": "1560670913630965841",
+          "mode": "list",
+          "cachedResultName": "BOOSTING 1V9",
+          "cachedResultUrl": "https://discord.com/channels/1560670913630965841"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "1565725831848923206",
+          "mode": "list",
+          "cachedResultName": "n",
+          "cachedResultUrl": "https://discord.com/channels/1560670913630965841/1565725831848923206"
+        },
+        "content": "=\n\n🎮 ¡Nuevo pedido en Eldorado! 🎉\n\n📌 Juego: {{ $json.gameName }}\n🏷️ Categoría: {{ $json.gameCategoryTitle }}\n👤 Comprador: {{ $json.buyerInfo.user.username }}\n\n📋 Detalles del pedido:\n{{ $json.boostingRequestDetails.descriptionValues.map(d => '• ' + d.label + ': ' + d.value).join('\\n') }}\n\n⏰ Expira: {{ $json.expireDate }}\n",
+        "options": {},
+        "embeds": {
+          "values": []
+        }
+      },
+      "id": "b6a4df7e-5e11-4bf7-8245-a2bb3e9a4138",
+      "name": "Notify Discord",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ],
+      "webhookId": "0f818d2f-ecd7-46ad-9ff0-1ebadf4d53de",
+      "credentials": {
+        "discordOAuth2Api": {
+          "id": "EZjNJ64eVsSQ7NZk",
+          "name": "Discord account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Access Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Access Token": {
+      "main": [
+        [
+          {
+            "node": "Get Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Orders": {
+      "main": [
+        [
+          {
+            "node": "Detect New Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect New Orders": {
+      "main": [
+        [
+          {
+            "node": "Get Request Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Request Details": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Notify Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Discord": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b45b34ad-4661-4a34-a056-0392eaa89053",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "aa7c1dec24892a7f41823e85bc21eeba11244291462f04d6b24b68dc7c470956"
+  },
+  "nodeGroups": [],
+  "id": "1IAF8lOvE1zWDkoA",
+  "tags": []
+}
